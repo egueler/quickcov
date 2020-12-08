@@ -49,7 +49,7 @@ Or you can import and use it in Python like this:
 ```python
 import quickcov
 with quickcov.QuickCov("./binary", "--flag @@") as q:
-    (plot, bitmap, final_coverage) = q.get_coverage(files, plot=True)
+    (plot, bitmap, final_coverage) = q.get_coverage("/dev/shm/fuzz/queue/")
 ```
 
 `@@` is a wildcard for AFL to know where to insert the input file path in the argument list.
@@ -63,15 +63,15 @@ def get_coverage(self, corpus, plot=False, \
                      use_afl_file_filter=True, minimum_time=0)
 ```
 
-* `corpus`: if string: directory where to find input files (i.e. `"/dev/shm/corpus/"`), if list: list of corpus files (absolute paths, e.g., `['/dev/shm/corpus/queue/id:00.txt', '/dev/shm/corpus/queue/id:01.txt']`)
+* `corpus`: if string: directory where to find input files (e.g. `"/dev/shm/corpus/"`), if list: list of corpus files (absolute paths, e.g., `['/dev/shm/corpus/queue/id:00.txt', '/dev/shm/corpus/queue/id:01.txt']`)
 
 * `plot`: set True if you want QuickCov to return a coverage-over-time plot
 
-* `time_dict`: dictionary in a `{file: timestamp}` format to determine file creation times. You should set a watchdog on the fuzzing output directory to track those. If time_dict is not specified (or None), the filesystem modification time will be used instead (note that it's difficult to get file *creation* dates on common Linux filesystems, and as such, file *modification* dates are used instead, which is not optimal, as AFL and others modify the seeds after creation, for trimming etc.)
+* `time_dict`: dictionary in a `{file: timestamp}` format to determine file creation times. You should use inotify (or something similar) and set it to the fuzzing output directory to track file creation dates. If time_dict is not specified (or None), the filesystem modification time will be used instead (note that it's difficult to get file *creation* dates on common Linux filesystems, and as such, file *modification* dates are used instead, which will give you an inaccurate plot, as AFL and others modify the seeds after creation, for trimming etc.)
 
-* `time_dict_lock`: if you have trouble with race conditions because you're writing to your `time_dict` while also calling `get_coverage`, you can set a lock here to prevent two threads from reading the `time_dict`
+* `time_dict_lock`: if you have trouble with race conditions because you're writing to `time_dict` while also calling `get_coverage`, you can set a lock here to prevent two threads from reading  `time_dict`
 
-* `limit`: only get coverage for these files, ignore the rest (files should be absolute paths). Useful if `corpus` is a file path but you want to blacklist some specific files.
+* `limit`: only get coverage for these files, ignore the rest (files should be absolute paths). Useful if `corpus` is a directory path but you want to whitelist some specific files.
 
 * `relative_time`: for the plot return value, set key values to relative timings (i.e. start with 0 instead of the actual timestamp of the first file)
 
@@ -85,7 +85,7 @@ It returns `(plot, bitmap, final_coverage)` where `plot` is a dictionary in the 
 
 ## Even faster
 
-QuickCov uses the AFL instrumented binary and extracts the bitmap to count the visited branches, but the way that the AFL instrumentation is implemented, there is a high likelihood of collisions, i.e., some branches will not be counted. Although we've increased the bitmap size tremendously to lower the chances of collisions (from $2^{16}$ to $2^{20}$), the output should still be considered only a good estimate instead of an accurate number. As such, this works better on smaller programs than on larger ones (in terms of basic blocks / edges). There is a collision-free implementation of [AFL++](https://github.com/AFLplusplus/AFLplusplus), and there is also [libAFL](https://github.com/AFLplusplus/LibAFL) which is AFL++ built as a library, so QuickCov might be updated in the future with these changes in mind.
+QuickCov uses the AFL instrumented binary and extracts the bitmap to count the visited branches, but the way that the AFL instrumentation is implemented, there is a high likelihood of collisions, i.e., some new branches will not be seen as new and thus they'll not be counted. Although we've increased the bitmap size tremendously to lower the chances of collisions (from 2^16 to 2^20), the output should still be considered only a good estimate instead of an accurate number. As such, this works better on smaller programs than on larger ones (in terms of basic blocks / edges). There is a collision-free implementation of [AFL++](https://github.com/AFLplusplus/AFLplusplus), and there is also [libAFL](https://github.com/AFLplusplus/LibAFL) which is AFL++ built as a library, so QuickCov might be updated in the future with these changes in mind.
 
 If you want to increase the speed and lose even more accuracy, edit `config.h` and change this line from
 
@@ -103,18 +103,16 @@ and then build it all again.
 
 ## QEMU
 
-If you don't want to instrument your binary first, there is also some built-in QEMU support. You first have to build the qemu stuff as described above, and then you're ready to go (QuickCov detects if the binary was instrumented or not and decides which mode to use, so you don't have to worry about it).
+If you don't want to instrument your binary first, there is also built-in QEMU support. You first have to build the qemu stuff as described above, and then you're ready to go (QuickCov detects if the binary was instrumented or not and decides which mode to use, so you don't have to worry about that part).
 
-There is also the possibility to use the QEMU mode to get accurate coverage information (i.e. basic block coverage). See above how much it impacts the performance. If you don't mind, you can set the `mode` parameter of `QuickCov` to `ExecuterMode.AFL_QEMU_BB`, e.g.:
+There is also the possibility to use the QEMU mode to get accurate coverage information (i.e. basic block coverage). See above for how much it impacts the performance. If you don't mind, you can set the `mode` parameter of `QuickCov` to `ExecuterMode.AFL_QEMU_BB`, e.g.:
 
 ```python
-```python
-quickcov.QuickCov("./bin", "@@", mode=ExecuterMode.AFL_QEMU_BB)
-```
+(_, BBs, _) = quickcov.QuickCov("./bin", "@@", mode=ExecuterMode.AFL_QEMU_BB)
 ```
 
-The `bitmap` return value will then be a list of basic block addresses extracted from QEMU.
+The `BBs` return value will then be a list of basic block addresses extracted from QEMU.
 
 ## PTrace
 
-There is also support for ptrace to get code coverage, but it's super slow, as you can see above, which defeats the whole purpose of this project. Not recommended.
+There is also support for ptrace to get code coverage, but it's super slow, as you can see above, which defeats the whole purpose of this project. It also requires a file with basic-block information which you can extract via IDA. Not recommended.
