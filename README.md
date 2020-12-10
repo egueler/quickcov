@@ -8,16 +8,14 @@ This is just dirty research code - it's buggy and it's ugly -, so don't expect t
 
 ## Performance
 
-If you're collecting the coverage information for a queue of 50 files on average, this is the expected performance on a `Intel Xeon Gold 6230 CPU @ 2.10GHz processors w/ 192GB RAM`:
+If you're collecting the coverage information for a queue of 50 files on average, this is the expected performance for `objdump` on a `Intel Xeon Gold 6230 CPU @ 2.10GHz processors w/ 192GB RAM`:
 
-```markdown
 | mode          | time per file | files/s | time to cover 100,000 files |
 |---------------|---------------|---------|-----------------------------|
 | `AFL`         | 3.86ms        | 259     | 6m26s                       |
 | `AFL_QEMU`    | 5.39ms        | 185     | 8m59s                       |
 | `AFL_QEMU_BB` | 12.46ms       | 80      | 20m46s                      |
 | `PTRACE`      | 100.42ms      | 10      | 2h47m22s                    | 
-```
 
 You can get 5x faster execution speeds if you decrease the bitmap size, [see section below](#even-faster).
 
@@ -99,7 +97,9 @@ to
 #define MAP_SIZE_POW2       16
 ```
 
-and then build it all again. You can use any value betweet 16 to 20 to trade in speed for accuracy and vice-versa.
+and then build it all again. You can use any value between 16 to 20 to trade in speed for accuracy and vice-versa. 
+
+Note that the unittests will not work if you change this value as the binaries are pre-built with the old bitmap size. And you also have to recompile all of your own binaries (with the new `afl-gcc` etc.) to update their bitmap sizes.
 
 ## QEMU
 
